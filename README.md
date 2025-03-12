@@ -86,8 +86,20 @@ Besides, it needs you to prepare the following checkpoints of 7B base models:
 
 
 ## Acknowledgement
-This repo is based on the LVLMs codebase of  [SID]([https://github.com/shikiw/OPERA](https://github.com/huofushuo/SID)), [OPERA](https://github.com/shikiw/OPERA), [VCD](https://github.com/DAMO-NLP-SG/VCD), and [HA-DPO](https://opendatalab.github.io/HA-DPO/) . Thanks for their excellent works!
+This repo is based on the LVLMs codebase of  [SID](https://github.com/huofushuo/SID), [OPERA](https://github.com/shikiw/OPERA), [VCD](https://github.com/DAMO-NLP-SG/VCD), and [HA-DPO](https://opendatalab.github.io/HA-DPO/) . Thanks for their excellent works!
 
+## Citation
 
+If you use this work in your research, please cite the following paper:
+
+```bibtex
+@inproceedings{
+tang2025intervening,
+title={Intervening Anchor Token: Decoding Strategy in Alleviating Hallucinations for {MLLM}s},
+author={Feilong Tang and Zile Huang and Chengzhi Liu and Qiang Sun and Harry Yang and Ser-Nam Lim},
+booktitle={The Thirteenth International Conference on Learning Representations},
+year={2025},
+url={https://openreview.net/forum?id=zGb4WgCW5i}
+}
 
 
