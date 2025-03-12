@@ -17,6 +17,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+
 """ PyTorch LLaMA model."""
 import math
 from typing import List, Optional, Tuple, Union
@@ -38,6 +40,7 @@ from scipy.special import erf
 import matplotlib.pyplot as plt
 
 logger = logging.get_logger(__name__)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 _CONFIG_FOR_DOC = "LlamaConfig"
 
@@ -237,8 +240,17 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 
 
 class LlamaAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
-
+    """ 
+        Copyright 2025 Everlyn Labs. All rights reserved.
+        Copyright 2025 toffeecat. All rights reserved. 
+        Licensed under the Apache License, Version 2.0 (the "License"); 
+        you may not use this file except in compliance with the License.
+        You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+        Unless required by applicable law or agreed to in writing, software
+        distributed under the License is distributed on an "AS IS" BASIS,
+        WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+        See the License for the specific language governing permissions and # limitations under the License.
+    """
     def __init__(self, config: LlamaConfig):
         super().__init__()
         self.config = config
@@ -287,7 +299,70 @@ class LlamaAttention(nn.Module):
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
     
-    
+    def compute_spectral_norm_(self, W, num_iterations=3, eps=1e-12): # Single-Vector Power version
+        """
+        Computes the spectral norm (maximum singular value) of a matrix W using power iteration.
+
+        Parameters:
+        - W: The weight matrix for which the spectral norm is computed.
+        - num_iterations: Number of iterations for the power iteration method, default is 3.
+        - eps: A small value to prevent numerical instability.
+
+        Returns:
+        - sigma: The approximate maximum singular value (spectral norm) of matrix W.
+        """
+        # Initialize a random vector v with the same dimension as the number of columns in W
+        v = torch.randn(W.shape[1], device=W.device)
+        
+        # Perform power iteration to approximate the dominant eigenvector
+        for _ in range(num_iterations):
+            # Multiply W.T (transpose of W) with (W * v), then normalize the result
+            v = torch.nn.functional.normalize(torch.matmul(W.t(), torch.matmul(W, v)), dim=0, eps=eps)
+        
+        # Compute the approximate maximum singular value as the 2-norm of Wv
+        Wv = torch.matmul(W, v)
+        sigma = torch.norm(Wv, 2)
+
+        return sigma
+
+
+    def compute_spectral_norm(self, W, num_iterations=1, eps=1e-12): # Dual-Vector Power version
+        """
+        Approximates the spectral norm (maximum singular value) of a matrix W using power iteration.
+
+        Parameters:
+        - W: The weight matrix for which the spectral norm is computed.
+        - num_iterations: Number of iterations for the power iteration method, default is 1.
+        - eps: A small value to prevent numerical instability.
+
+        Returns:
+        - sigma: The approximate maximum singular value (spectral norm) of matrix W.
+        """
+        # Initialize random vectors u and v with dimensions matching the rows and columns of W, respectively
+        u = torch.randn(W.shape[0], device=W.device)
+        v = torch.randn(W.shape[1], device=W.device)
+
+        # Normalize u and v to unit length
+        u = u / (u.norm() + eps)
+        v = v / (v.norm() + eps)
+
+        # Perform power iteration to approximate the dominant singular value
+        for _ in range(num_iterations):
+            # Compute W.T * u and normalize the result
+            v = torch.matmul(W.T, u)
+            v = v / (v.norm() + eps)
+            
+            # Compute W * v and normalize the result
+            u = torch.matmul(W, v)
+            u = u / (u.norm() + eps)
+
+        # Compute the spectral norm as the dot product of u and (W * v)
+        sigma = torch.dot(u, torch.matmul(W, v))
+
+        return sigma.abs()  # Return the absolute value of the maximum singular value
+
+
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -319,15 +394,18 @@ class LlamaAttention(nn.Module):
             key_states = self.k_proj(hidden_states)
             value_states = self.v_proj(hidden_states)
 
-        # query_states = self.q_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)*0.9
-        # key_states = self.k_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)*0.9
-
-        expansion = 1.3
+        gamm = 0.8
+        expansion   = 1.0
         suppression = 1.0
+
+        
         query_states = self.q_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)*expansion
         key_states = self.k_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)*expansion
-        # query_states = self.q_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        # key_states = self.k_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        
+
+
+
+
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         kv_seq_len = key_states.shape[-2]
@@ -335,7 +413,6 @@ class LlamaAttention(nn.Module):
             kv_seq_len += past_key_value[0].shape[-2]
         
         
-
         cos, sin = self.rotary_emb(value_states, seq_len=1000)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
@@ -346,13 +423,43 @@ class LlamaAttention(nn.Module):
 
         past_key_value = (key_states, value_states) if use_cache else None
 
-        # repeat k/v heads if n_kv_heads < n_heads
+
+        with torch.no_grad():
+            # lambda_ = 1.5
+            query_states_ = torch.mean(torch.mean(query_states,dim=0),dim=0)
+            key_states_ = torch.mean(torch.mean(key_states,dim=0),dim=0)
+            norm_query_states = self.compute_spectral_norm(query_states_)
+            norm_key_states = self.compute_spectral_norm(key_states_) 
+
+            # Log the spectral norms
+            logging.info("norm_query_states: %s", norm_query_states)
+            logging.info("norm_key_states: %s", norm_key_states)
+
+            # Log the shape of the trace of query_states
+            trace_w_shape = torch.diagonal(query_states, dim1=-2, dim2=-1).sum(dim=-1).shape
+            logging.info("Trace of query_states (W): %s", trace_w_shape)  # Example: torch.Size([16, 32])
+
+            # Log the shape of query_states
+            logging.info("Shape of query_states: %s", query_states.shape)
+            
+
+            trace_W_Q_2_query_states = torch.mean(torch.mean(torch.diagonal(torch.matmul(query_states, query_states.transpose(-1, -2)), dim1=-2, dim2=-1).sum(dim=-1),dim=0),dim=0)  # (num_heads,)
+            trace_W_Q_2_key_states = torch.mean(torch.mean(torch.diagonal(torch.matmul(key_states, key_states.transpose(-1, -2)), dim1=-2, dim2=-1).sum(dim=-1),dim=0),dim=0)  # (num_heads,)
+
+            # square_size = min(query_key_states.shape[-2:])
+            # traces = np.trace(query_key_states[:, :, :square_size, :square_size].cpu(), axis1=2, axis2=3)
+            # traces = torch.diagonal( F.normalize(query_key_states, p=2, dim=(-2, -1)), dim1=-2, dim2=-1).sum(dim=-1)
+
+
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / ( math.sqrt(self.head_dim) * suppression)
-        
-        
+        # Refine the computation of normalization factors for query-key and query-query states
+        norm_query_key_states = 1 + gamm / torch.log(trace_W_Q_2_key_states + 1e-7)
+        norm_query_query_states = 1 + gamm / torch.log(trace_W_Q_2_query_states + 1e-7)
+
+        attn_weights = (torch.matmul(query_states * norm_query_query_states, key_states.transpose(2, 3)) * norm_query_key_states) / ( math.sqrt(self.head_dim) * suppression)
+
         if attn_weights.size() != (bsz, self.num_heads, q_len, kv_seq_len):
             raise ValueError(
                 f"Attention weights should be of size {(bsz, self.num_heads, q_len, kv_seq_len)}, but is"
@@ -365,7 +472,7 @@ class LlamaAttention(nn.Module):
                     f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
                 )
             attn_weights = attn_weights + attention_mask
-
+        
         # upcast attention to fp32
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
         attn_output = torch.matmul(attn_weights, value_states)
@@ -390,76 +497,6 @@ class LlamaAttention(nn.Module):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
-    
-    # def forward(
-    #     self,
-    #     hidden_states: torch.Tensor,
-    #     attention_mask: Optional[torch.Tensor] = None,
-    #     position_ids: Optional[torch.LongTensor] = None,
-    #     past_key_value: Optional[Tuple[torch.Tensor]] = None,
-    #     output_attentions: bool = False,
-    #     use_cache: bool = False,
-    #     layer_idx: int = -1,
-    # ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-    #     bsz, q_len, _ = hidden_states.size()
-
-    #     # 投影到查询、键、值
-    #     query_states = self.q_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)  # (bsz, num_heads, q_len, head_dim)
-    #     key_states = self.k_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)      # (bsz, num_heads, q_len, head_dim)
-    #     value_states = self.v_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)    # (bsz, num_heads, q_len, head_dim)
-
-    #     # 计算当前 W_QK 的迹值和特征谱尺度
-    #     with torch.no_grad():
-    #         # 获取 W_Q 和 W_K 的权重
-    #         W_Q = self.q_proj.weight  # Shape: (num_heads * head_dim, hidden_size)
-    #         W_K = self.k_proj.weight  # Shape: (num_heads * head_dim, hidden_size)
-
-    #         # 重塑为 (num_heads, head_dim, hidden_size)
-    #         W_Q = W_Q.view(self.num_heads, self.head_dim, self.hidden_size)
-    #         W_K = W_K.view(self.num_heads, self.head_dim, self.hidden_size)
-
-    #         # 计算每个头的 W_QK = W_Q @ W_K^T，结果形状为 (num_heads, head_dim, head_dim)
-    #         W_QK = torch.matmul(W_Q, W_K.transpose(-1, -2))  # (num_heads, head_dim, head_dim)
-
-    #         # 计算每个头的迹值和特征谱尺度
-    #         trace_W_QK = torch.diagonal(W_QK, dim1=-2, dim2=-1).sum(dim=-1)  # (num_heads,)
-    #         trace_W_QK_sq = torch.diagonal(torch.matmul(W_QK, W_QK.transpose(-1, -2)), dim1=-2, dim2=-1).sum(dim=-1)  # (num_heads,)
-
-    #         # 设定期望的迹值和特征谱尺度
-    #         desired_trace = self.desired_trace  # 例如，1.0
-    #         desired_scale = 1.0  # 设定期望的特征谱尺度
-
-    #         # 计算缩放因子 alpha 和 beta
-    #         alpha_trace = desired_trace / (trace_W_QK + 1e-6)  # (num_heads,)
-    #         alpha_scale = desired_scale / (trace_W_QK_sq + 1e-6)  # (num_heads,)
-
-    #         # 合并缩放因子（可以根据需要调整权重）
-    #         alpha = alpha_trace * alpha_scale  # (num_heads,)
-
-    #         # 重塑为 (num_heads, 1, 1) 以便广播
-    #         alpha = alpha.view(self.num_heads, 1, 1)
-
-    #         # 应用缩放因子到查询和键
-    #         query_states = query_states * alpha  # (bsz, num_heads, q_len, head_dim)
-    #         key_states = key_states * alpha      # (bsz, num_heads, q_len, head_dim)
-
-    #     # 如果需要，应用旋转嵌入
-    #     query_states, key_states = self.rotary_emb(query_states, key_states, position_ids)
-
-    #     # 计算注意力权重
-    #     attn_weights = torch.matmul(query_states, key_states.transpose(-1, -2)) / (self.head_dim ** 0.5)  # (bsz, num_heads, q_len, q_len)
-    #     if attention_mask is not None:
-    #         attn_weights = attn_weights + attention_mask
-
-    #     # 计算注意力概率
-    #     attn_probs = nn.functional.softmax(attn_weights, dim=-1)  # (bsz, num_heads, q_len, q_len)
-
-    #     # 计算注意力输出
-    #     attn_output = torch.matmul(attn_probs, value_states)  # (bsz, num_heads, q_len, head_dim)
-    #     attn_output = attn_output.transpose(1, 2).contiguous().view(bsz, q_len, self.hidden_size)  # (bsz, q_len, hidden_size)
-    #     attn_output = self.o_proj(attn_output)  # (bsz, q_len, hidden_size)
-
-    #     return attn_output, attn_probs, None
     
 
 
@@ -791,6 +828,7 @@ class LlamaModel(LlamaPreTrainedModel):
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         for idx, decoder_layer in enumerate(self.layers):
+            # print("Layer: ", idx)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
@@ -957,6 +995,32 @@ class LlamaModel(LlamaPreTrainedModel):
                 )
 
             hidden_states = layer_outputs[0]
+
+
+
+
+            """
+            save attention
+            """
+
+            # if layer_outputs is not None:
+            #     attention_map = layer_outputs[1]
+            #     save_path = '。results/exp'
+            #     attn_map_path = os.path.join(save_path, f'attn_map_{attention_map.shape[-1]}_layer{idx}.pt')
+
+            #     if attention_map.shape[-2] == 1:
+            #         last_attention_map = torch.load(os.path.join(save_path, f'attn_map_{attention_map.shape[-1]-1}_layer{idx}.pt'))
+            #         new_attention_map = torch.nn.functional.pad(last_attention_map, (0, 1, 0, 1))
+            #         new_attention_map[:, :, -1, :] = attention_map[:, :, -1, :]
+            #     else:
+            #         new_attention_map = attention_map
+
+            #     torch.save(new_attention_map, attn_map_path)
+
+
+
+
+
 
             if use_cache:
                 next_decoder_cache += (layer_outputs[2 if output_attentions else 1],)

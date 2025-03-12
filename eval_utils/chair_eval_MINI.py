@@ -169,7 +169,7 @@ norm = transforms.Normalize(mean, std)
 img_files = os.listdir(args.data_path)
 random.shuffle(img_files)
 
-with open('/mnt/sda/feilongtang/Hallucination/datasets/mscoco/annotations/instances_val2014.json', 'r') as f:
+with open('./datasets/mscoco/annotations/instances_val2014.json', 'r') as f:
     lines = f.readlines()
 coco_anns = json.loads(lines[0])
 
@@ -188,7 +188,7 @@ for ann_info in coco_anns["annotations"]:
     )
 
 
-base_dir = '/mnt/sda/feilongtang/Hallucination/SID/METHOD_EXPERIMENTS/MINIGPT/CONTRASTIVE/CHAIR/FULL-512'
+base_dir = './METHOD_EXPERIMENTS/MINIGPT/[method]'
 
 
 # for img_id in tqdm(range(len(img_files))):
@@ -261,23 +261,6 @@ for img_id in range(len(img_files)):
     with open(os.path.join(base_dir, 'llava-{}samples-greedy.jsonl'.format(args.test_sample)), "a") as f:
                 json.dump(img_save, f)
                 f.write('\n')
-    # # dump metric file
-    # if args.use_fast_v == True and args.use_cd == True:
-    #     with open(os.path.join(base_dir, 'top_important_ours-{}samples-cd-layer{}-token{}-time{}-greedy.jsonl'.format(args.test_sample, args.fast_v_agg_layer, args.fast_v_attention_rank, time)), "a") as f:
-    #         json.dump(img_save, f)
-    #         f.write('\n')
-    # elif args.use_vcd == True:
-    #     with open(os.path.join(base_dir, 'degraded_ours-{}samples-vcd-sampling.jsonl'.format(args.test_sample)), "a") as f:
-    #         json.dump(img_save, f)
-    #         f.write('\n')
-    # elif args.use_icd == True:
-    #     with open(os.path.join(base_dir, 'degraded_ours-{}samples-icd-sampling.jsonl'.format(args.test_sample)), "a") as f:
-    #         json.dump(img_save, f)
-    #         f.write('\n')
-    # else:
-    #     with open(os.path.join(base_dir, 'ours-{}samples-opera.jsonl'.format(args.test_sample)), "a") as f:
-    #         json.dump(img_save, f)
-    #         f.write('\n')
 
     
 

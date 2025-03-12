@@ -443,7 +443,7 @@ def print_metrics(hallucination_cap_dict, quiet=False):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     
-    parser.add_argument("--cap_file", type=str, default='/home/hfs/llm/OPERA-main/log/llava-1.5/ours-500samples-beam.jsonl',
+    parser.add_argument("--cap_file", type=str, default='./log/llava-1.5/ours-500samples-beam.jsonl',
                         help="path towards json or jsonl saving image ids and their captions in list of dict.")
     parser.add_argument("--image_id_key", type=str, default="image_id",
                         help="in each dict of cap_file, which key stores image id of coco.")
@@ -452,7 +452,7 @@ if __name__ == '__main__':
     
     parser.add_argument("--cache", type=str, default="chair.pkl",
                         help="pre inited CHAIR evaluator object, for fast loading.")
-    parser.add_argument("--coco_path", type=str, default='/home/hfs/e/llm/mscoco/annotations_trainval2014/annotations/',
+    parser.add_argument("--coco_path", type=str, default='./mscoco/annotations_trainval2014/annotations/',
                         help="only use for regenerating CHAIR evaluator object, will be ignored if uses cached evaluator.")
     
     parser.add_argument("--save_path", type=str, default="log/results/chair.txt",
@@ -475,10 +475,3 @@ if __name__ == '__main__':
     
     if args.save_path:
         save_hallucinated_words(args.save_path, cap_dict)
-
-
-# CUDA_VISIBLE_DEVICES=5 python chair.py \
-# --cap_file ../POPE-Adv/text_feat/chair-eval/instructblip/ours.jsonl \
-# --image_id_key image_id --caption_key caption \
-# --coco_path /mnt/petrelfs/share_data/wangjiaqi/mllm-data-alg/COCO_2014/ori/annotations_trainval2014/annotations/ \
-# --save_path ../POPE-Adv/text_feat/chair-eval/instructblip/ours_outputs.json

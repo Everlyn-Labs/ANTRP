@@ -42,8 +42,6 @@ import matplotlib as mpl
 import seaborn
 import json
 
-# python pope_eval.py --model llava-1.5 --data_path /home/hfs/e/llm/mscoco/ --pope-type random --gpu-id 0 --beam 5 --scale_factor 50 --threshold 15 --num_attn_candidates 5 --penalty_weights 1
-
 
 
 MODEL_EVAL_CONFIG_PATH = {
@@ -188,10 +186,10 @@ parser.add_argument("--fast-v-agg-layer", type=int, default=2)
 # parser.add_argument("--cfg-path", required=True, help="path to configuration file.")
 # parser.add_argument("--gpu-id", type=int, default=0, help="specify the gpu to load the model.")
 # parser.add_argument("--data-path", type=str, default="/apdcephfs/private_huofushuo/dataset/mscoco/GQA/images", help="data path")
-parser.add_argument("--data-path", type=str, default="/mnt/sda/feilongtang/Hallucination/datasets/mscoco/val2014/", help="data path")
+parser.add_argument("--data-path", type=str, default="./datasets/mscoco/val2014/", help="data path")
 parser.add_argument("--batch-size", type=int, default=1, help="batch size")
 parser.add_argument("--num_workers", type=int, default=1, help="num workers")
-parser.add_argument("--answers-file", type=str, default="/home/hfs/llm/OPERA-main/log/llava-1.5/pope/")
+parser.add_argument("--answers-file", type=str, default="./log/llava-1.5/pope/")
 # auto-generation
 parser.add_argument("--fast-v-sys-length", default=None, type=int, help='the length of system prompt')
 parser.add_argument("--fast-v-image-token-length", default=None, type=int, help='the length of image token')

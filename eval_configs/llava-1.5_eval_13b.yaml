@@ -12,7 +12,7 @@ model:
   # prompt_path: "prompts/alignment.txt"
   prompt_template: 'USER: {} ASSISTANT: '
   system_message: "A chat between a curious user and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the user's questions." 
-  merged_ckpt: "/home/hfs/e/llm/llava-v1.5-13b/"
+  merged_ckpt: "./llava-v1.5-13b/"
 
 
   # load_in_8bit: True

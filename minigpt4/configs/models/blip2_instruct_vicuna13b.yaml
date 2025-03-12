@@ -22,7 +22,7 @@ model:
   num_query_token: 32
 
   # path to Vicuna checkpoint
-  llm_model: "/home/hfs/e/llm/vicuna-13b-v1.1"
+  llm_model: "./vicuna-13b-v1.1"
 
   # generation configs
   prompt: ""
